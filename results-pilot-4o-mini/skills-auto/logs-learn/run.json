@@ -1,0 +1,69 @@
+{
+  "task": "logs-learn",
+  "condition": "skills-auto",
+  "role": "learn",
+  "error": null,
+  "timestamp": "2026-10-06T10:17:16.702974+00:00",
+  "skills_sha256": "8b3cff0935e2e73fa9876975311c75ccc0d9f40ba8ce5184d91b0690528e2bcc",
+  "seconds": 198.6,
+  "tokens": {
+    "input": 14420,
+    "output": 16426,
+    "total": 30846
+  },
+  "tool_calls": 2,
+  "subagent_calls": 0,
+  "skills_read": 0,
+  "skills_modified": false,
+  "final_message": "",
+  "score": 0.0,
+  "passed": 0,
+  "total": 9,
+  "checks": [
+    {
+      "name": "valid_structure",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "entry_count",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "timestamps_utc",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "exception_fields",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "repeat_counts",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "counts_by_service",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "rule_service_names",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "rule_sorted_errors",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    },
+    {
+      "name": "rule_schema_header",
+      "passed": false,
+      "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/private/var/folders/k9/jp3p8dzx419b6zql_kdx928m0000gn/T/lab-logs-learn-san6ve_t/workspace/errors.json'"
+    }
+  ]
+}

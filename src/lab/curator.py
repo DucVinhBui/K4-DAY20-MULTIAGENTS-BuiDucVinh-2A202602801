@@ -4,10 +4,65 @@ Pseudo-code: guides/pseudocode/04_curator.md
 Kiểm tra:    pytest tests/test_04_curator.py
 Chạy thật:   python -m lab.curator
 """
+import json
 import re
 from pathlib import Path
 
-from .tasks import eval_markers   # có sẵn: định danh của tác vụ đánh giá, tính lúc chạy
+from .tasks import ROOT, eval_markers   # có sẵn: định danh của tác vụ đánh giá, tính lúc chạy
+
+TRACE_CHARS = 6000
+
+CURATOR_PROMPT = """You write SKILLS for a coding and data-analysis agent.
+Below are the failed checks (name and the review bot's feedback) and the tail of the execution trace of several runs.
+Find the general PROCESS mistakes and organisation conventions behind the failures (not task-specific answers) and
+write at most {max_skills} short skills that prevent those mistakes on NEW tasks of the same kind.
+
+Rules:
+- Skills must be general: never mention a task id, a data/source file or function that exists only in one task,
+  or a concrete answer or number. File names, JSON keys and headings REQUIRED by a house convention are allowed,
+  because they are the convention itself.
+- Feedback lines starting with "RULE:" state organisation (house) conventions that the review bot enforces on
+  every task of that kind but that task statements never mention. Copy EVERY such rule into a skill, keeping its
+  exact file names, JSON keys, headings, formats and examples; a vague paraphrase ("follow the conventions") is
+  useless because the agent cannot guess them.
+- Feedback without "RULE:" (wrong values, wrong counts) points to technical mistakes: use the trace to find the
+  process error (for example a tool or library that failed, a format that was not handled, a result that was
+  never re-checked) and write a concrete preventive step.
+- Write exactly one skill per kind of work seen below (for example fixing a Python package, cleaning tabular
+  data, parsing log files), each holding both its house rules and its technical checklist. Do not write generic
+  advice skills.
+- Refer to the data generically ("records", "rows", "entries", "the input file", "the amount column"): do not
+  copy domain nouns, column values, identifiers, sentinel values or dates from the data unless a RULE states them.
+- Each skill starts with YAML frontmatter containing `name` (lower case, hyphens) and `description` (one sentence
+  starting with "Use when ..." that names a BROAD trigger situation), followed by at most 40 lines of imperative
+  instructions (a numbered checklist ending with a self-check list works well).
+- Output format, character for character, nothing outside the blocks:
+=== SKILL: <name> ===
+---
+name: <name>
+description: Use when ...
+---
+<body>
+=== END ===
+
+{runs}
+"""
+
+REPAIR_PROMPT = """The skill below was rejected by the validator: it must have valid YAML frontmatter, at most
+80 body lines, and it must not contain words reserved for other material (typically domain nouns of a data set,
+file names or identifiers). Rewrite it with the SAME name and the same rules, referring to data generically
+("records", "rows", "entries", "the input file"); keep file names, JSON keys and headings that a house convention
+requires. Output only the rewritten block in exactly this format:
+=== SKILL: {name} ===
+---
+name: {name}
+description: Use when ...
+---
+<body>
+=== END ===
+
+{text}
+"""
 
 # ---- CÓ SẴN, KHÔNG SỬA: kiểm tra và tách khối skill (phần dễ sai và liên quan bảo mật) ----------------
 SAFE_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -68,7 +123,67 @@ def curate_skills(results_dir="results", source_condition="baseline", out_dir=No
     model mặc định: make_model() (lab.model).
     Trả về: danh sách đường dẫn SKILL.md đã ghi.
     """
-    raise NotImplementedError("TODO: cài đặt curate_skills (xem guides/pseudocode/04_curator.md)")
+    out_dir = Path(out_dir) if out_dir is not None else ROOT / "skills" / "auto"
+    runs = []
+    for f in sorted((Path(results_dir) / source_condition).glob("*/run.json")):
+        r = json.loads(f.read_text(encoding="utf-8"))
+        if r.get("role") != "learn":          # tuyệt đối không dùng dữ liệu tác vụ đánh giá
+            continue
+        trace_file = f.parent / "trace.md"
+        trace = trace_file.read_text(encoding="utf-8")[-TRACE_CHARS:] if trace_file.exists() else ""
+        failed = [(c["name"], c.get("detail", "")) for c in r.get("checks", []) if not c.get("passed")]
+        runs.append({"task": r["task"], "failed": failed, "trace": trace})
+
+    if not any(r["failed"] for r in runs):
+        print(f"warning: no failed check in the learning runs of '{source_condition}' - nothing to curate")
+        return []
+
+    sections = []
+    for r in runs:
+        failed = "\n".join(f"- {name}: {detail}" for name, detail in r["failed"]) or "- (none)"
+        sections.append(f"## Run of task {r['task']}\n### Failed checks\n{failed}\n"
+                        f"### End of trace\n{r['trace']}")
+    prompt = CURATOR_PROMPT.format(max_skills=max_skills, runs="\n\n".join(sections))
+
+    if model is None:
+        from .model import make_model
+        model = make_model()
+    reply = _text(model.invoke(prompt).content)
+
+    written = []
+    for name, text in parse_skill_blocks(reply):
+        if len(written) >= max_skills:
+            break
+        problems = validate_skill(text, expected_name=name)
+        if problems and SAFE_NAME.fullmatch(name):
+            print(f"repairing skill {name!r}: {len(problems)} problem(s)")
+            repaired = _repair_skill(model, name, text)
+            if repaired is not None:
+                text, problems = repaired, validate_skill(repaired, expected_name=name)
+        if problems:
+            print(f"skipped skill {name!r}: {', '.join(problems)}")
+            continue
+        path = out_dir / name / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text + "\n", encoding="utf-8")
+        written.append(path)
+    return written
+
+
+def _repair_skill(model, name: str, text: str) -> str | None:
+    """Một lần sửa (repair) cho skill bị validate_skill từ chối. Lý do được nói chung chung:
+    KHÔNG đưa định danh của tác vụ đánh giá vào prompt."""
+    reply = _text(model.invoke(REPAIR_PROMPT.format(name=name, text=text)).content)
+    for n, t in parse_skill_blocks(reply):
+        if n == name:
+            return t
+    return None
+
+
+def _text(content) -> str:
+    if isinstance(content, list):               # một số nhà cung cấp trả về danh sách khối nội dung
+        return "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in content)
+    return str(content)
 
 
 if __name__ == "__main__":
