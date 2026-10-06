@@ -9,7 +9,7 @@
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: OpenAI, `LAB_MODEL=openai:gpt-4.1-mini` (API trả về `gpt-4.1-mini-2025-04-14`), `LAB_TEMPERATURE=0`, `recursion_limit=60` (mặc định). Một lần chạy thử (pilot) với `openai:gpt-4o-mini` đã bị bỏ vì mô hình quá yếu (xem Phụ lục); kết quả pilot lưu ở `results-pilot-4o-mini/`, không dùng trong bảng chính.
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: deepagents 0.7.21, macOS 27.0 (Apple Silicon), Python 3.12, chạy trực tiếp (không Docker).
 - Số lần chạy tác vụ đã dùng / ngân sách: thí nghiệm chính (gpt-4.1-mini) 3 điều kiện × 3 tác vụ học trước đóng băng + 12 lần chạy sau đóng băng (6 đánh giá cho baseline và subagents, 6 cho skills-auto); 1 lần gọi curator. Pilot (gpt-4o-mini): 12 lần chạy + 3 lần gọi curator. Không có ngân sách cố định do giảng viên đặt; khóa API cá nhân.
-- Commit của tag `freeze`:
+- Commit của tag `freeze`: `367d737` ("freeze skills", 2026-10-06T17:27:33+07:00); commit giả thuyết: `d93c0a6` ("hypotheses"). `python scripts/verify_freeze.py`: "checked 6 runs of skill conditions: OK".
 
 ## 2. Giả thuyết (commit TRƯỚC tag `freeze`, Phần 4.0)
 
@@ -87,37 +87,93 @@ Phần 3.4 (`results/skills-auto-dev/`, chạy trước đóng băng): `skills_r
 
 ## 7. Kết quả so sánh (Phần 4.3, 4.4)
 
-> Dán nội dung `report/table.md` và kết quả `python scripts/check_breakdown.py`. Nêu các lần chạy có `error` hoặc `skills_modified = true` (nếu có) và cách xử lý.
+Bảng do `python -m lab.compare > report/table.md` sinh ra:
+
+| Task | baseline | subagents | skills-auto |
+|---|---|---|---|
+| code-learn | 7/10 | 7/10 | 7/10 |
+| data-learn | 5/8 | 3/8 | 5/8 |
+| logs-learn | 1/9 | 1/9 | 6/9 |
+| code-eval | 7/11 | 7/11 | 7/11 |
+| data-eval | 5/9 | 3/9 | 5/9 |
+| logs-eval | 1/10 | 1/10 | 1/10 |
+| **Mean score - learning tasks** | 0.48 | 0.40 | 0.66 |
+| **Mean score - evaluation tasks** | 0.43 | 0.36 | 0.43 |
+| **Mean tokens per run** | 44,280 | 70,027 | 80,928 |
+| **Runs that read a skill** | 0/6 | 0/6 | 0/6 |
+
+`python scripts/check_breakdown.py`:
 
 ```text
-(dán bảng ở đây)
+condition     role    technical  house rules  mean tokens  read a skill
+baseline      eval     13/18         0/12          54,633      0/3     
+baseline      learn    13/18         0/9           33,928      0/3     
+subagents     eval     11/18         0/12          96,714      0/3     
+subagents     learn    11/18         0/9           43,340      0/3     
+skills-auto   eval     13/18         0/12          80,438      0/3     
+skills-auto   learn    18/18         0/9           81,418      0/3
 ```
+
+Phần 3.4 (cùng bộ skill, trước đóng băng, `results/skills-auto-dev/`, không nằm trong bảng): `code-learn` 7/10, `data-learn` 5/8, `logs-learn` 6/9 (trung bình 0,66; 46.187 token/lần chạy; `skills_read` = 0 ở 3/3).
+
+Lần chạy có `error` và `skills_modified`:
+
+- `subagents/data-eval`: `GraphRecursionError: Recursion limit of 60 reached`. Vết: tác tử chính gọi `task` một lần rồi gọi `read_file` 27 lần (đọc `orders.json` theo từng đoạn) và hết giới hạn bước; điểm 3/9 được chấm trên workspace tại thời điểm dừng. Đây là hành vi của tác tử (lặp), không phải lỗi hạ tầng, nên giữ nguyên và không chạy lại; giới hạn 60 giống mọi điều kiện.
+- `skills_modified` = `false` ở mọi lần chạy (12/12 sau đóng băng).
+- Sự cố môi trường (pilot, trước đóng băng): trong `skills-auto/data-learn` của pilot gpt-4o-mini, tác tử chạy `pip install pandas` và cài vào `.venv` của harness (vì `PATH` của shell trỏ tới venv). Đã gỡ pandas, numpy, python-dateutil, six; thêm `PIP_NO_INDEX=1` vào môi trường shell trong `make_backend` để chặn cài gói; các lần chạy bị ảnh hưởng lưu riêng ở `results-pilot-4o-mini/skills-auto-pandas-installed/`. Mọi lần chạy chính (gpt-4.1-mini) diễn ra sau sửa đổi này; `grep 'pip install' results/*/*/trace.md` không có kết quả.
 
 ## 8. Phân tích
 
-> Trả lời từng câu bằng số liệu từ mục 7 và bằng chứng từ vết. Kết quả âm hoặc không có khác biệt vẫn hợp lệ nếu được phân tích tốt.
+1. **Tác vụ học:** chỉ `skills-auto` cao hơn `baseline` (0,66 so với 0,48), và toàn bộ chênh lệch đến từ một tác vụ: `logs-learn` 6/9 so với 1/9. `code-learn` và `data-learn` bằng nhau ở cả ba điều kiện. `subagents` thấp hơn (0,40) do `data-learn` 3/8. **Tác vụ đánh giá:** không điều kiện nào cải thiện: `baseline` 0,43, `skills-auto` 0,43 (giống hệt từng tác vụ: 7/11, 5/9, 1/10), `subagents` 0,36. Vậy `skills-auto` "cải thiện tác vụ học nhưng không cải thiện tác vụ đánh giá". Dạng này thường là dấu hiệu quá khớp, nhưng ở đây cơ chế khác: skill **không được đọc lần nào** (`skills_read` = 0 ở 12/12 lần chạy `skills-auto`, kể cả `skills-auto-dev`), nên chênh lệch ở `logs-learn` không thể do nội dung skill. Vết cho thấy ở `skills-auto/logs-learn` tác tử viết và chạy script Python (3 lệnh `execute`), còn ở `baseline` và `subagents` nó tự gõ toàn bộ JSON bằng một lệnh `write_file`. System prompt của `skills-auto` dài hơn (có danh sách skill và `SKILLS_NOTE`), và ở nhiệt độ 0 khác biệt prompt đủ để đổi quỹ đạo. Hiệu ứng này không lặp lại ở `logs-eval` (cả ba điều kiện đều tự gõ JSON, đều 1/10). Kết luận: chênh lệch tác vụ học là nhiễu do prompt, không phải "hiệu quả học". H1, H2, H3 đều được số liệu xác nhận.
 
-1. So với `baseline`, điều kiện nào cải thiện điểm tác vụ **học**? Điều kiện nào cải thiện điểm tác vụ **đánh giá**? Có điều kiện nào cải thiện tác vụ học nhưng không cải thiện tác vụ đánh giá? Nếu có, đó là dấu hiệu gì?
-2. Tách điểm thành check kỹ thuật và check quy ước (`rule_`). Skill do curator sinh giúp nhóm check nào? Check quy ước **mới** của tác vụ đánh giá có được skill giúp không, và vì sao?
-3. Dựa vào vết và `skills_read`, giải thích một check mà skill giúp đạt và một check mà skill không giúp (skill chưa được đọc, đọc nhưng không làm theo, skill thiếu hoặc sai).
-4. Chi phí: so sánh số token trung bình giữa các điều kiện. Điều kiện nào có hiệu quả tốt nhất theo điểm trên mỗi token? Đa tác tử có đáng chi phí trong thí nghiệm này không?
-5. Có dấu hiệu rò rỉ dữ liệu hoặc quá khớp nào trong skill sinh ra không? Nhóm đã phòng tránh như thế nào?
-6. Nhiễu: so sánh điểm tác vụ học của cùng bộ skill ở Phần 3.4 (đã sao lưu) và sau đóng băng. Chênh lệch bao nhiêu? Nó cho biết điều gì về độ tin cậy của các chênh lệch trong bảng ở mục 7?
+2. **Check kỹ thuật:** `baseline` 13/18 (học) và 13/18 (đánh giá); `skills-auto` 18/18 và 13/18; `subagents` 11/18 và 11/18. **Check quy ước:** 0/9 (học) và 0/12 (đánh giá) ở **cả ba điều kiện**. Skill do curator sinh **không giúp nhóm check nào**, vì không được đọc. Riêng phần nội dung: skill có chép đúng 9 quy ước của tác vụ học, nên nếu được đọc thì có thể giúp các check `rule_type_hints`, `rule_regression_tests`, `rule_changelog`, `rule_money_in_cents`, `rule_meta_block`, `rule_clean_csv`, `rule_service_names`, `rule_sorted_errors`, `rule_schema_header` (9/12 check quy ước của tác vụ đánh giá có cùng tên). Check quy ước **mới** của tác vụ đánh giá (`rule_version_bump`, `rule_sorted_keys_format`, `rule_source_line`) không thể được skill giúp: curator chỉ thấy phản hồi `detail` của tác vụ học, và các quy ước này không xuất hiện ở đó. Muốn đạt chúng, tác tử phải tự phát hiện quy ước trong workspace (nhóm lỗi A).
+
+3. - **Check mà skill (về nội dung) giúp được nhưng thực tế không giúp vì không được đọc:** `code-eval/rule_changelog`. Skill `python-package-quality-assurance` bước 3 ghi đúng "Record each bug fix in CHANGELOG.md under the heading '## Unreleased' ... - fix(<function name>): <short description>". Vết `skills-auto/code-eval`: không có lệnh `read_file` nào vào `skills/`, tác tử không mở `CHANGELOG.md` và check thất bại giống `baseline`. Tương tự `rule_meta_block`, `rule_money_in_cents` ở `data-eval`.
+   - **Check skill không giúp vì skill thiếu:** `logs-eval/timestamps_utc` và `repeat_counts`. Ngay cả khi được đọc, skill `log-file-parsing-and-triage-reporting` chỉ nói "Convert all timestamps to UTC" mà không có bước "phân tích bằng script và đọc lại đầu ra". Vết cả ba điều kiện ở `logs-eval` đều là đọc `worker.log` rồi gọi `write_file` với JSON tự gõ: đây là nguyên nhân thật (nhóm B và D, mục 4) mà curator không rút ra được.
+   - Không có check nào mà skill giúp đạt theo cơ chế "đọc skill rồi làm theo"; đây là kết quả âm của thí nghiệm.
+
+4. **Chi phí** (token trung bình mỗi lần chạy, 6 tác vụ): `baseline` 44.281, `subagents` 70.027 (+58%), `skills-auto` 80.928 (+83%). Điểm trên 100.000 token: `baseline` 1,03; `skills-auto` 0,68; `subagents` 0,54. Trên tác vụ đánh giá: 0,79; 0,54; 0,37. **`baseline` hiệu quả nhất** ở mọi cách tính. Khoảng 97% token là token đầu vào (ví dụ `baseline` 42.791 trên 44.281), tức là chi phí do ngữ cảnh lớn dần theo số bước, không phải do sinh văn bản. `skills-auto` tốn hơn dù không đọc skill vì danh sách skill được nối vào system prompt của mọi lần gọi, và vì quỹ đạo dài hơn (`data-eval` 146.483 token, 16 tool call). Đa tác tử **không đáng chi phí** trong thí nghiệm này: điểm thấp hơn ở cả tác vụ học (0,40 so với 0,48) và đánh giá (0,36 so với 0,43) mà token đánh giá cao hơn 77% (96.714 so với 54.633). Nguyên nhân từ vết: lời giao việc thiếu thông tin (`data-learn` thiếu tên khóa, mục 5) và vòng lặp đọc tệp ở `subagents/data-eval` (hết `recursion_limit`). Ngay cả `baseline` cũng tự gọi `general-purpose` một lần ở `data-eval` (121.085 token, cao nhất của `baseline`).
+
+5. **Rò rỉ:** không có. `validate_skill` (có sẵn) chặn mọi skill chứa định danh của tác vụ đánh giá; curator chỉ đọc `run.json`/`trace.md` có `role == "learn"` (test `test_04` xác nhận prompt không chứa `data-eval` hay tên check của tác vụ đánh giá); vòng sửa skill chỉ nói lý do chung chung, không đưa định danh đánh giá vào prompt; nhóm không mở `tasks/*-eval/` trước tag `freeze`. Trong pilot, `validate_skill` đã từ chối một skill vì chứa từ "orders" (trùng tên tệp đánh giá), cho thấy cơ chế hoạt động, nhưng cũng là dương tính giả vì từ này có trong câu RULE của tác vụ học. **Quá khớp:** có dấu hiệu nhẹ: skill code chứa "Decimal ... round half up" và "RFC 4180" (chi tiết lỗi của `code-learn`), skill data chứa ví dụ "-999" (giá trị riêng của dữ liệu học; dữ liệu đánh giá dùng giá trị thiếu khác, theo vết `baseline/data-eval` là "-1"). Các chi tiết này không gây hại nhưng không chuyển giao được. Phòng tránh: prompt curator yêu cầu không nêu giá trị, tên cột, định danh của dữ liệu trừ khi nằm trong RULE.
+
+6. **Nhiễu:** cùng bộ skill, Phần 3.4 so với sau đóng băng: `code-learn` 7/10 và 7/10, `data-learn` 5/8 và 5/8, `logs-learn` 6/9 và 6/9, tức **chênh lệch điểm bằng 0** ở cả ba. Token thì dao động mạnh: 61.267 → 76.769 (+25%), 43.106 → 40.697 (-6%), 34.187 → 126.789 (×3,7). Pilot gpt-4o-mini cho thấy điều tương tự (`skills-auto/logs-learn` hai lần đều 0/9 và đúng 30.846 token). Ở nhiệt độ 0, **lặp lại cùng một cấu hình** gần như cho cùng điểm, nên ước lượng nhiễu này đánh giá thấp độ bất định thật. Bằng chứng là `logs-learn` thay đổi 1/9 → 6/9 chỉ vì system prompt khác (không đọc skill). Vì vậy một chênh lệch ±5 check ở một tác vụ có thể sinh ra chỉ từ thay đổi nhỏ của prompt; các chênh lệch trong bảng mục 7 (0,48 so với 0,66 ở tác vụ học; 0,43 so với 0,36 ở tác vụ đánh giá) không đủ tin cậy để kết luận có ý nghĩa thống kê. Chỉ hai kết luận chắc chắn: check quy ước 0/21 ở mọi điều kiện, và đa tác tử tốn nhiều token hơn.
 
 ## 9. Hạn chế và tính hợp lệ
 
-> Nêu ít nhất 3 hạn chế và ảnh hưởng của từng hạn chế đến kết luận (ví dụ: chỉ 3 tác vụ mỗi vai trò, mỗi cấu hình chạy một lần, nhiễu của mô hình, tác vụ do giảng viên thiết kế sẵn quy ước, chỉ một mô hình).
-
-1.
-2.
-3.
+1. **Mẫu rất nhỏ:** 3 tác vụ học, 3 tác vụ đánh giá, 1 họ cho mỗi loại việc. Một tác vụ (`logs-learn`) quyết định toàn bộ chênh lệch tác vụ học; không thể tính khoảng tin cậy hay kiểm định. Mọi kết luận về "cải thiện" chỉ mang tính mô tả.
+2. **Mỗi cấu hình chạy một lần ở nhiệt độ 0:** lặp lại cùng cấu hình cho cùng điểm (mục 8.6), nhưng điều đó chỉ đo nhiễu trong một quỹ đạo gần tất định, không đo độ nhạy với prompt. Thay đổi nhỏ của system prompt đã đổi `logs-learn` 1/9 → 6/9. Cần chạy lặp với nhiệt độ > 0 hoặc nhiều biến thể prompt (hướng 6e) để ước lượng phương sai thật.
+3. **Một mô hình duy nhất (gpt-4.1-mini) và mô hình không tuân thủ chỉ dẫn đọc skill:** `skills_read` = 0 ở 12/12 lần chạy, nên thí nghiệm **không kiểm định được** giả thuyết "skill tự sinh giúp tác tử"; nó chỉ cho thấy "skill không được đọc thì không giúp". Pilot gpt-4o-mini cũng có `skills_read` = 0. Kết luận về skill không tổng quát hóa cho mô hình mạnh hơn, vốn có thể tuân thủ `SKILLS_NOTE`.
+4. **Tác vụ và quy ước do giảng viên thiết kế:** 12/17 check thất bại của `baseline` trên tác vụ đánh giá là quy ước ẩn (`rule_`) mà đề không nhắc. Điểm vì vậy đo khả năng "đoán quy ước" nhiều hơn năng lực kỹ thuật, và thiên vị cho phương pháp chép quy ước từ phản hồi (như curator). Mỗi tác vụ đánh giá có thêm một quy ước mới mà không phương pháp nào ở đây có thể học được.
+5. **Thay đổi harness trong lúc làm:** prompt curator được chỉnh sau pilot và `PIP_NO_INDEX=1` được thêm sau sự cố cài gói. Mọi lần chạy chính diễn ra sau các thay đổi này nên so sánh giữa các điều kiện vẫn công bằng, nhưng kết quả pilot không so sánh trực tiếp được với kết quả chính.
+6. **Đếm `tool_calls` và `skills_read` chỉ ở luồng chính:** nếu subagent `general-purpose` đọc skill thì không được đếm. Tuy vậy, ở `skills-auto` không có lần gọi `task` nào (`subagent_calls` = 0), nên hạn chế này không ảnh hưởng kết luận về skill.
 
 ## 10. Kết luận
 
-> Tối đa 5 câu. Chỉ khẳng định điều số liệu hỗ trợ. Nêu một đề xuất cải tiến tiếp theo.
+Trên gpt-4.1-mini, không điều kiện nào cải thiện tác vụ đánh giá so với `baseline` (0,43): `skills-auto` bằng (0,43) và `subagents` thấp hơn (0,36), trong khi `baseline` rẻ nhất (44.281 token/lần chạy so với 70.027 và 80.928). Curator đã rút ra skill đúng và đủ 9 quy ước từ phản hồi tác vụ học, nhưng tác tử không đọc skill lần nào (`skills_read` = 0 ở 12/12 lần chạy), nên check quy ước vẫn 0/21 ở mọi điều kiện. Đa tác tử làm mất thông tin khi giao việc và tăng token mà không tăng điểm. Mức tăng của `skills-auto` trên tác vụ học (0,48 → 0,66) là hiệu ứng của prompt chứ không phải học, vì nó không lặp lại trên tác vụ đánh giá. Đề xuất tiếp theo: bỏ phụ thuộc vào việc tác tử tự chọn đọc skill bằng cách nạp nội dung skill trực tiếp (ví dụ đưa vào system prompt, hoặc tự động đọc skill có `description` khớp), rồi lặp lại thí nghiệm với vài lần chạy ở nhiệt độ > 0 để tách hiệu quả skill khỏi nhiễu.
 
 ## Phụ lục
 
-- Lệnh đã chạy (theo thứ tự):
-- Thử thách mở rộng (nếu có): hướng chọn, kết quả, nhận xét.
-- Ghi chú khác:
+- Lệnh đã chạy (theo thứ tự, thí nghiệm chính với `LAB_MODEL=openai:gpt-4.1-mini`):
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate && pip install -e .
+pytest                                               # 32 passed (test_01 15, test_02 9, test_03 6, test_04 2)
+python scripts/tour.py
+python -m lab.runner --condition baseline --tasks learn
+python -m lab.runner --condition subagents --tasks learn
+python -m lab.curator                                # 1 lần, 3 skill
+python -m lab.runner --condition skills-auto --tasks learn
+mv results/skills-auto results/skills-auto-dev
+git add -A && git commit -m "hypotheses"
+git commit --allow-empty -m "freeze skills" && git tag freeze
+python -m lab.runner --condition baseline --tasks eval
+python -m lab.runner --condition subagents --tasks eval
+python -m lab.runner --condition skills-auto --tasks all
+python scripts/verify_freeze.py                      # OK
+python -m lab.compare > report/table.md
+python scripts/check_breakdown.py
+```
+
+- Thử thách mở rộng: không thực hiện.
+- Pilot gpt-4o-mini (`results-pilot-4o-mini/`, `report/curator-history/pilot-4o-mini-*`): `baseline` học 5/10, 1/8, 1/9; `subagents` 5/10, 0/8 (hết `recursion_limit`, 407.246 token), 0/9; `skills-auto` (sau khi khôi phục môi trường) 2/10 (hết `recursion_limit`), 1/8, 0/9 (tác tử viết JSON trong lời gọi `write_file` dài đến mức hết giới hạn token đầu ra, tệp không được tạo); `skills_read` = 0 ở mọi lần chạy. Bị bỏ vì mô hình thất bại phần lớn check kỹ thuật (không có pandas thì ghi số đoán) và không đọc skill, nên thí nghiệm gần như không cho thông tin; quyết định đổi mô hình được đưa ra **trước** khi viết giả thuyết và đóng băng.
+- Thay đổi so với pseudo-code: `run_task` dùng `agent.stream(..., stream_mode="values")` (mở rộng tùy chọn ở `03_runner.md`) để giữ vết khi lỗi; `make_backend` thêm `PIP_NO_INDEX=1`; curator có prompt chặt hơn và một vòng sửa skill (mục 6).
