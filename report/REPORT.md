@@ -8,8 +8,8 @@
 
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: OpenAI, `LAB_MODEL=openai:gpt-4.1-mini` (API trả về `gpt-4.1-mini-2025-04-14`), `LAB_TEMPERATURE=0`, `recursion_limit=60` (mặc định). Một lần chạy thử (pilot) với `openai:gpt-4o-mini` đã bị bỏ vì mô hình quá yếu (xem Phụ lục); kết quả pilot lưu ở `results-pilot-4o-mini/`, không dùng trong bảng chính.
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: deepagents 0.7.21, macOS 27.0 (Apple Silicon), Python 3.12, chạy trực tiếp (không Docker).
-- Số lần chạy tác vụ đã dùng / ngân sách: thí nghiệm chính (gpt-4.1-mini) 3 điều kiện × 3 tác vụ học trước đóng băng + 12 lần chạy sau đóng băng (6 đánh giá cho baseline và subagents, 6 cho skills-auto); 1 lần gọi curator. Pilot (gpt-4o-mini): 12 lần chạy + 3 lần gọi curator. Không có ngân sách cố định do giảng viên đặt; khóa API cá nhân.
-- Commit của tag `freeze`: `367d737` ("freeze skills", 2026-10-06T17:27:33+07:00); commit giả thuyết: `d93c0a6` ("hypotheses"). `python scripts/verify_freeze.py`: "checked 6 runs of skill conditions: OK".
+- Số lần chạy tác vụ đã dùng / ngân sách: thí nghiệm chính (gpt-4.1-mini) 3 điều kiện × 3 tác vụ học trước đóng băng + 12 lần chạy sau đóng băng (6 đánh giá cho baseline và subagents, 6 cho skills-auto); 1 lần gọi curator. Mở rộng 6e: 36 lần chạy tác vụ đánh giá (Phụ lục). Pilot (gpt-4o-mini): 12 lần chạy + 3 lần gọi curator. Không có ngân sách cố định do giảng viên đặt; khóa API cá nhân.
+- Commit của tag `freeze`: `6a5cf14` ("freeze skills", 2026-10-06T17:27:33+07:00); commit giả thuyết: `91804a7` ("hypotheses"). `python scripts/verify_freeze.py`: "checked 6 runs of skill conditions: OK".
 
 ## 2. Giả thuyết (commit TRƯỚC tag `freeze`, Phần 4.0)
 
@@ -136,12 +136,12 @@ Lần chạy có `error` và `skills_modified`:
 
 5. **Rò rỉ:** không có. `validate_skill` (có sẵn) chặn mọi skill chứa định danh của tác vụ đánh giá; curator chỉ đọc `run.json`/`trace.md` có `role == "learn"` (test `test_04` xác nhận prompt không chứa `data-eval` hay tên check của tác vụ đánh giá); vòng sửa skill chỉ nói lý do chung chung, không đưa định danh đánh giá vào prompt; nhóm không mở `tasks/*-eval/` trước tag `freeze`. Trong pilot, `validate_skill` đã từ chối một skill vì chứa từ "orders" (trùng tên tệp đánh giá), cho thấy cơ chế hoạt động, nhưng cũng là dương tính giả vì từ này có trong câu RULE của tác vụ học. **Quá khớp:** có dấu hiệu nhẹ: skill code chứa "Decimal ... round half up" và "RFC 4180" (chi tiết lỗi của `code-learn`), skill data chứa ví dụ "-999" (giá trị riêng của dữ liệu học; dữ liệu đánh giá dùng giá trị thiếu khác, theo vết `baseline/data-eval` là "-1"). Các chi tiết này không gây hại nhưng không chuyển giao được. Phòng tránh: prompt curator yêu cầu không nêu giá trị, tên cột, định danh của dữ liệu trừ khi nằm trong RULE.
 
-6. **Nhiễu:** cùng bộ skill, Phần 3.4 so với sau đóng băng: `code-learn` 7/10 và 7/10, `data-learn` 5/8 và 5/8, `logs-learn` 6/9 và 6/9, tức **chênh lệch điểm bằng 0** ở cả ba. Token thì dao động mạnh: 61.267 → 76.769 (+25%), 43.106 → 40.697 (-6%), 34.187 → 126.789 (×3,7). Pilot gpt-4o-mini cho thấy điều tương tự (`skills-auto/logs-learn` hai lần đều 0/9 và đúng 30.846 token). Ở nhiệt độ 0, **lặp lại cùng một cấu hình** gần như cho cùng điểm, nên ước lượng nhiễu này đánh giá thấp độ bất định thật. Bằng chứng là `logs-learn` thay đổi 1/9 → 6/9 chỉ vì system prompt khác (không đọc skill). Vì vậy một chênh lệch ±5 check ở một tác vụ có thể sinh ra chỉ từ thay đổi nhỏ của prompt; các chênh lệch trong bảng mục 7 (0,48 so với 0,66 ở tác vụ học; 0,43 so với 0,36 ở tác vụ đánh giá) không đủ tin cậy để kết luận có ý nghĩa thống kê. Chỉ hai kết luận chắc chắn: check quy ước 0/21 ở mọi điều kiện, và đa tác tử tốn nhiều token hơn.
+6. **Nhiễu:** cùng bộ skill, Phần 3.4 so với sau đóng băng: `code-learn` 7/10 và 7/10, `data-learn` 5/8 và 5/8, `logs-learn` 6/9 và 6/9, tức **chênh lệch điểm bằng 0** ở cả ba. Token thì dao động mạnh: 61.267 → 76.769 (+25%), 43.106 → 40.697 (-6%), 34.187 → 126.789 (×3,7). Pilot gpt-4o-mini cho thấy điều tương tự (`skills-auto/logs-learn` hai lần đều 0/9 và đúng 30.846 token). Ở nhiệt độ 0, **lặp lại cùng một cấu hình** thường cho cùng điểm, nhưng không luôn luôn: mở rộng 6e (Phụ lục) cho thấy `baseline/data-eval` ra 5/9, 3/9, 5/9 và `subagents/data-eval` ra 3/9, 4/9, 5/9 qua ba lần chạy ở T=0. Bằng chứng là `logs-learn` thay đổi 1/9 → 6/9 chỉ vì system prompt khác (không đọc skill). Vì vậy một chênh lệch ±5 check ở một tác vụ có thể sinh ra chỉ từ thay đổi nhỏ của prompt; các chênh lệch trong bảng mục 7 (0,48 so với 0,66 ở tác vụ học; 0,43 so với 0,36 ở tác vụ đánh giá) không đủ tin cậy để kết luận có ý nghĩa thống kê. Phép lặp 6e xác nhận điều này: qua 5 lần chạy đánh giá mỗi điều kiện, điểm trung bình là `baseline` 0,42 (độ lệch chuẩn 0,03), `subagents` 0,37 (0,07), `skills-auto` 0,46 (0,06), các khoảng dao động chồng lên nhau. Chỉ hai kết luận chắc chắn: check quy ước 0/60 ở mọi điều kiện và mọi lần lặp, và đa tác tử tốn nhiều token hơn `baseline`.
 
 ## 9. Hạn chế và tính hợp lệ
 
 1. **Mẫu rất nhỏ:** 3 tác vụ học, 3 tác vụ đánh giá, 1 họ cho mỗi loại việc. Một tác vụ (`logs-learn`) quyết định toàn bộ chênh lệch tác vụ học; không thể tính khoảng tin cậy hay kiểm định. Mọi kết luận về "cải thiện" chỉ mang tính mô tả.
-2. **Mỗi cấu hình chạy một lần ở nhiệt độ 0:** lặp lại cùng cấu hình cho cùng điểm (mục 8.6), nhưng điều đó chỉ đo nhiễu trong một quỹ đạo gần tất định, không đo độ nhạy với prompt. Thay đổi nhỏ của system prompt đã đổi `logs-learn` 1/9 → 6/9. Cần chạy lặp với nhiệt độ > 0 hoặc nhiều biến thể prompt (hướng 6e) để ước lượng phương sai thật.
+2. **Bảng chính chỉ có một lần chạy mỗi ô ở nhiệt độ 0:** mở rộng 6e lặp thêm 4 lần trên tác vụ đánh giá (2 ở T=0, 2 ở T=0,7), nhưng tác vụ học không được lặp, và 5 lần chạy vẫn quá ít để kiểm định. Thay đổi nhỏ của system prompt đã đổi `logs-learn` 1/9 → 6/9, và một lần chạy T=0,7 của `skills-auto/logs-eval` cho 6/10 bằng đúng cơ chế đó (viết script thay vì tự gõ JSON), nên độ nhạy với prompt và lấy mẫu là nguồn bất định lớn nhất.
 3. **Một mô hình duy nhất (gpt-4.1-mini) và mô hình không tuân thủ chỉ dẫn đọc skill:** `skills_read` = 0 ở 12/12 lần chạy, nên thí nghiệm **không kiểm định được** giả thuyết "skill tự sinh giúp tác tử"; nó chỉ cho thấy "skill không được đọc thì không giúp". Pilot gpt-4o-mini cũng có `skills_read` = 0. Kết luận về skill không tổng quát hóa cho mô hình mạnh hơn, vốn có thể tuân thủ `SKILLS_NOTE`.
 4. **Tác vụ và quy ước do giảng viên thiết kế:** 12/17 check thất bại của `baseline` trên tác vụ đánh giá là quy ước ẩn (`rule_`) mà đề không nhắc. Điểm vì vậy đo khả năng "đoán quy ước" nhiều hơn năng lực kỹ thuật, và thiên vị cho phương pháp chép quy ước từ phản hồi (như curator). Mỗi tác vụ đánh giá có thêm một quy ước mới mà không phương pháp nào ở đây có thể học được.
 5. **Thay đổi harness trong lúc làm:** prompt curator được chỉnh sau pilot và `PIP_NO_INDEX=1` được thêm sau sự cố cài gói. Mọi lần chạy chính diễn ra sau các thay đổi này nên so sánh giữa các điều kiện vẫn công bằng, nhưng kết quả pilot không so sánh trực tiếp được với kết quả chính.
@@ -174,6 +174,47 @@ python -m lab.compare > report/table.md
 python scripts/check_breakdown.py
 ```
 
-- Thử thách mở rộng: không thực hiện.
+- **Thử thách mở rộng: 6e. Lặp để đo nhiễu.**
+  - **Thiết kế:** chạy lại cả ba điều kiện trên 3 tác vụ đánh giá thêm 4 lần, mỗi lần một thư mục `--results` riêng: 2 lần ở cấu hình chính (`LAB_TEMPERATURE=0`, `results-6e/t0-rep1`, `t0-rep2`) và 2 lần ở `LAB_TEMPERATURE=0.7` (`results-6e/t07-rep1`, `t07-rep2`) để thấy độ nhạy với lấy mẫu. Tổng 36 lần chạy, cùng mô hình, cùng `recursion_limit=60`, cùng bộ skill đóng băng (`skills_sha256` của mọi lần chạy `skills-auto` trong `results-6e/` trùng với `results/`, `skills_modified` = `false` ở 36/36; mọi lần chạy diễn ra sau tag `freeze`, từ 2026-10-06T10:44Z). Bảng chính (mục 7) giữ nguyên, không bị thay bằng kết quả lặp. Bảng đầy đủ: `report/table-6e.md` (sinh bằng `python scripts/repeat_noise.py`).
+  - **Kết quả theo tác vụ** (lần chạy chính được tính là lần lặp thứ nhất ở T=0):
+
+    | Tác vụ | baseline (T=0 ×3; T=0,7 ×2) | subagents | skills-auto |
+    |---|---|---|---|
+    | code-eval | 7, 7, 7; 7, 7 /11 | 7, 7, 7; 7, 7 /11 | 7, 7, 7; 6, 7 /11 |
+    | data-eval | 5, 3, 5; 5, 5 /9 | 3, 4, 5; 0, 5 /9 | 5, 5, 5; 5, 5 /9 |
+    | logs-eval | 1, 1, 1; 1, 1 /10 | 1, 0, 1; 1, 1 /10 | 1, 1, 1; 6, 1 /10 |
+
+  - **Tổng hợp trên 5 lần chạy mỗi điều kiện** (điểm = trung bình 3 tác vụ đánh giá của một lần lặp):
+
+    | | baseline | subagents | skills-auto |
+    |---|---|---|---|
+    | Điểm trung bình [min-max] | 0,42 [0,36-0,43] | 0,37 [0,25-0,43] | 0,46 [0,43-0,57] |
+    | Độ lệch chuẩn của điểm | 0,03 | 0,07 | 0,06 |
+    | Check kỹ thuật (trên 18) mỗi lần lặp | 13, 11, 13, 13, 13 | 11, 11, 13, 8, 13 | 13, 13, 13, 17, 13 |
+    | Check quy ước | 0/60 | 0/60 | 0/60 |
+    | Token trung bình mỗi lần chạy [min-max của từng lần lặp] | 34.924 [22.861-54.633] | 57.572 [38.770-96.714] | 60.238 [45.339-80.438] |
+    | Lần chạy đọc skill | 0/15 | 0/15 | 0/15 |
+
+  - **So với kết quả chính:**
+    - Thứ tự điểm trung bình (`skills-auto` ≥ `baseline` > `subagents`) giống bảng chính, nhưng khoảng dao động của ba điều kiện chồng lên nhau và chênh lệch lớn nhất (0,46 so với 0,42) nhỏ hơn biên độ dao động của một điều kiện (`subagents` 0,25-0,43). Không có chênh lệch nào đủ tin cậy; kết luận "không điều kiện nào cải thiện tác vụ đánh giá" của mục 10 giữ nguyên.
+    - Ở T=0 điểm **không** hoàn toàn tất định: 2/9 ô thay đổi giữa các lần lặp (`baseline/data-eval` 5 → 3 → 5, `subagents/data-eval` 3 → 4 → 5, `subagents/logs-eval` 1 → 0 → 1). Như vậy mục 8.6 (dựa trên tác vụ học) đánh giá thấp nhiễu. Token dao động mạnh hơn điểm: `baseline/data-eval` 121.085 → 39.894 → 24.081 token với cùng cấu hình.
+    - Hai kết luận chắc chắn vẫn đứng vững qua 45 lần chạy đánh giá: check quy ước 0 ở mọi lần chạy, và skill không được đọc lần nào (`skills_read` = 0 ở 15/15 lần chạy `skills-auto`). `subagents` tốn hơn `baseline` khoảng 65% token mà không tăng điểm.
+  - **Cơ chế (từ vết) của các lần chạy lệch:**
+    - `skills-auto/logs-eval`, T=0,7 rep1, 6/10: tác tử viết và chạy một script Python (`execute`) để phân tích log, trong khi 14/15 lần chạy `logs-eval` còn lại (mọi điều kiện) không chạy lệnh `execute` nào mà tự gõ JSON. Đạt toàn bộ 5 check kỹ thuật, trượt cả 4 check quy ước. Không đọc skill. Đây đúng là cơ chế đã thấy ở `skills-auto/logs-learn` (mục 8.1): mức tăng đến từ việc tác tử chọn dùng script, không phải từ nội dung skill, và chỉ xuất hiện ở 1/5 lần chạy.
+    - `subagents/data-eval`, T=0,7 rep1, 0/9: subagent `general-purpose` trả về một đoạn code chưa chạy cùng lời hứa "I will perform the analysis now"; tác tử chính không kiểm tra mà ghi ngay `answer.json` với các con số tự bịa (nhóm D, mục 4). Đây là dạng hỏng riêng của đa tác tử: chỉ dẫn "Check what a subagent returns" trong `SUBAGENTS_NOTE` không được làm theo.
+    - `baseline/data-eval`, T=0 rep1, 3/9: script chạy được (có `datetime.fromisoformat`, phần còn lại của script bị cắt trong vết) nhưng ra sai `march_revenue_utc` và `march_orders_utc`, phù hợp với việc lấy tháng trước khi đổi sang UTC (nhóm B; không xác nhận được dòng lỗi vì vết bị cắt). Hai lần lặp khác ở T=0 làm đúng.
+    - `subagents` có độ lệch chuẩn lớn nhất vì mỗi lần chạy thêm một bước giao việc mà chất lượng lời giao và việc kiểm tra kết quả thay đổi giữa các lần.
+  - **Sự cố khi chạy:** lần thử đầu của `skills-auto/code-eval` ở T=0,7 rep2 bị treo hơn 10 phút trên một kết nối HTTPS tới API (không ghi `run.json`, không có `error`). Tôi dừng tiến trình, xóa thư mục `results-6e/t07-rep2/skills-auto` chưa hoàn tất và chạy lại 3 tác vụ của ô này một lần. Đây là lỗi hạ tầng, không phải hành vi của tác tử, và không có kết quả nào bị loại theo điểm số. Không có lần chạy nào trong `results-6e/` cài gói (`grep 'pip install'` không có kết quả).
+  - **Hạn chế:** 5 lần chạy mỗi ô vẫn quá ít để tính khoảng tin cậy có ý nghĩa; trộn T=0 và T=0,7 trong tổng hợp làm khoảng dao động phản ánh cả hai nguồn nhiễu; tác vụ học không được lặp nên mức tăng `logs-learn` 1/9 → 6/9 chưa được đo lại trực tiếp. Bước tiếp theo hợp lý: ≥10 lần lặp ở T=0,7 cho từng điều kiện và kiểm định hoán vị trên điểm từng tác vụ.
+  - **Lệnh tái lập:**
+
+    ```bash
+    for temp in 0 0.7; do for rep in rep1 rep2; do
+      for c in baseline subagents skills-auto; do
+        LAB_TEMPERATURE=$temp python -m lab.runner --condition $c --tasks eval --results "results-6e/t${temp//./}-$rep"
+      done
+    done; done
+    python scripts/repeat_noise.py > report/table-6e.md
+    ```
 - Pilot gpt-4o-mini (`results-pilot-4o-mini/`, `report/curator-history/pilot-4o-mini-*`): `baseline` học 5/10, 1/8, 1/9; `subagents` 5/10, 0/8 (hết `recursion_limit`, 407.246 token), 0/9; `skills-auto` (sau khi khôi phục môi trường) 2/10 (hết `recursion_limit`), 1/8, 0/9 (tác tử viết JSON trong lời gọi `write_file` dài đến mức hết giới hạn token đầu ra, tệp không được tạo); `skills_read` = 0 ở mọi lần chạy. Bị bỏ vì mô hình thất bại phần lớn check kỹ thuật (không có pandas thì ghi số đoán) và không đọc skill, nên thí nghiệm gần như không cho thông tin; quyết định đổi mô hình được đưa ra **trước** khi viết giả thuyết và đóng băng.
 - Thay đổi so với pseudo-code: `run_task` dùng `agent.stream(..., stream_mode="values")` (mở rộng tùy chọn ở `03_runner.md`) để giữ vết khi lỗi; `make_backend` thêm `PIP_NO_INDEX=1`; curator có prompt chặt hơn và một vòng sửa skill (mục 6).
